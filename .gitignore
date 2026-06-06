@@ -1,0 +1,22 @@
+# Secretos / variables de entorno
+.env
+
+# Entorno virtual
+venv/
+.venv/
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Datos / modelos locales (descomenta si aplica)
+# data/
+# *.pkl
+# *.joblib
+
+# VS Code
+.vscode/

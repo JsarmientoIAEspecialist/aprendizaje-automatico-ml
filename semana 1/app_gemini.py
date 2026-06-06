@@ -21,7 +21,7 @@ def ejecutar_consulta():
     try:
         respuesta = cliente.models.generate_content(
             model="gemini-2.5-flash",
-            contents="Preséntate como experto en ML y responde a esta pregunta: ¿Cuáles son las mejores prácticas para entrenar un modelo de machine learning? en 3 renglones"
+            contents="Preséntate como experto en ML y responde a esta pregunta: ¿Cuáles son las mejores prácticas para entrenar un modelo de machine learning? en tres renglones"
         )
         print("Respuesta de Gemini:")
         print(respuesta.text)

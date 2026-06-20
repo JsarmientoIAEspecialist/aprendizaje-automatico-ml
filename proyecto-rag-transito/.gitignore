@@ -1,0 +1,16 @@
+# Credenciales — NUNCA subir
+.env
+
+# Base vectorial generada por ingestar.py (se reconstruye con `python ingestar.py`)
+faiss_index/
+
+# Entorno virtual
+.venv/
+venv/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+
+# Caché de modelos de HuggingFace (si se descargan localmente)
+.cache/

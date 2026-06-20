@@ -1,0 +1,21 @@
+# --- Núcleo RAG (LangChain) ---
+langchain-core
+langchain-community
+langchain-text-splitters
+langchain-huggingface
+langchain-groq
+
+# --- Embeddings locales (CPU) ---
+sentence-transformers
+
+# --- Base vectorial ---
+faiss-cpu
+
+# --- Carga de PDF ---
+pypdf
+
+# --- Configuración / entorno ---
+python-dotenv
+
+# --- Interfaz de chat ---
+streamlit

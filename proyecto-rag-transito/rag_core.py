@@ -15,8 +15,8 @@ import numpy as np
 from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 
 # --- Configuración central (un solo lugar para cambiar parámetros) ----------
 
@@ -28,8 +28,10 @@ PERSIST_DIR = os.path.join(os.path.dirname(__file__), "faiss_index")
 _INDEX_FILE = "index.faiss"   # índice vectorial (FAISS)
 _STORE_FILE = "index.pkl"     # textos + metadatos (docstore)
 
-# Modelo LLM en Groq (gratis, rápido). Si se deprecara, usar "llama-3.1-8b-instant".
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# LLM vía el router de inferencia de HuggingFace (API compatible con OpenAI).
+# El sufijo ":groq" hace que HF enrute la petición a Groq (llama-3.3-70b-versatile).
+HF_ROUTER_URL = "https://router.huggingface.co/v1"
+LLM_MODEL = "meta-llama/Llama-3.3-70B-Instruct:groq"
 
 # Cuántos fragmentos recuperar por pregunta (más fragmentos = mejor recall).
 DEFAULT_K = 8
@@ -96,16 +98,24 @@ def cargar_vector_store(embeddings: HuggingFaceEmbeddings) -> FAISS:
     )
 
 
-def cargar_llm() -> ChatGroq:
-    """Configura el LLM de Groq. Requiere GROQ_API_KEY en el entorno/.env."""
+def cargar_llm() -> ChatOpenAI:
+    """Configura el LLM vía el router de HuggingFace (compatible con OpenAI).
+
+    Requiere HF_TOKEN en el entorno/.env.
+    """
     load_dotenv()
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("HF_TOKEN")
     if not api_key:
         raise RuntimeError(
-            "Falta GROQ_API_KEY. Copia .env.example a .env y pega tu clave de Groq "
-            "(la obtienes gratis en https://console.groq.com)."
+            "Falta HF_TOKEN. Copia .env.example a .env y pega tu token de HuggingFace "
+            "(lo obtienes gratis en https://huggingface.co/settings/tokens)."
         )
-    return ChatGroq(model=GROQ_MODEL, temperature=0.0, api_key=api_key)
+    return ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0.0,
+        api_key=api_key,
+        base_url=HF_ROUTER_URL,
+    )
 
 
 def _formatear_contexto(fragmentos) -> str:
@@ -130,7 +140,7 @@ def _paginas_consultadas(fragmentos) -> list[int]:
     return sorted(paginas)
 
 
-def responder(pregunta: str, vector_store: FAISS, llm: ChatGroq, k: int = DEFAULT_K) -> dict:
+def responder(pregunta: str, vector_store: FAISS, llm: ChatOpenAI, k: int = DEFAULT_K) -> dict:
     """Ejecuta el ciclo RAG completo para una pregunta.
 
     Devuelve un dict con la respuesta del LLM, las páginas consultadas

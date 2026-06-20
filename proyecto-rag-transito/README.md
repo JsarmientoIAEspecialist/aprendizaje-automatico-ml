@@ -158,7 +158,7 @@ PDF (Código de Tránsito)
    ▼
 5. Recuperación semántica      → top-k fragmentos relevantes
 6. Prompt aumentado            → contexto + pregunta + reglas de "Lex"
-7. Generación de respuesta     → Groq (llama-3.3-70b-versatile)
+7. Generación de respuesta     → Llama 3.3 70B (vía HuggingFace Router → Groq)
    └─► Respuesta + páginas citadas + fragmentos (trazabilidad)
 ```
 
@@ -172,7 +172,7 @@ información sobre esto en el Código Nacional de Tránsito"*; y nunca inventa.
 
 ### Requisitos
 - Python 3.10 o superior.
-- Una **API key de Groq** (gratuita en <https://console.groq.com>).
+- Un **token de HuggingFace** (gratuito en <https://huggingface.co/settings/tokens>, tipo *Read*).
 
 ### 1. Clonar y entrar a la carpeta del proyecto
 ```bash
@@ -193,15 +193,15 @@ pip install -r requirements.txt
 > ℹ️ La primera instalación descarga `torch` (~200 MB) y, al ejecutar por primera
 > vez, el modelo de embeddings (~120 MB). Todo corre en **CPU**, sin GPU.
 
-### 3. Configurar la API key
+### 3. Configurar el token
 ```bash
 # Copia la plantilla y edita el archivo .env
 copy .env.example .env        # Windows
 # cp .env.example .env        # macOS / Linux
 ```
-Abre `.env` y pega tu clave:
+Abre `.env` y pega tu token de HuggingFace:
 ```
-GROQ_API_KEY=gsk_tu_clave_real_de_groq
+HF_TOKEN=hf_tu_token_real
 ```
 
 ### 4. Construir la base de conocimiento (una sola vez)
@@ -246,7 +246,7 @@ proyecto-rag-transito/
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
 | Embeddings | `sentence-transformers` — `paraphrase-multilingual-MiniLM-L12-v2` (local) |
 | Base vectorial | `FAISS` |
-| LLM | `Groq` — `llama-3.3-70b-versatile` |
+| LLM | `Llama 3.3 70B` vía **HuggingFace Router** (API compatible con OpenAI; enruta a Groq) |
 | Interfaz | `Streamlit` |
 
 ---
@@ -262,7 +262,7 @@ proyecto-rag-transito/
   inmovilización?"* a veces no recuperan la definición exacta y el asistente responde
   *"No encontré información…"*. Es preferible esto a inventar, pero es una limitación
   real de la búsqueda semántica sobre texto tipo diccionario.
-- El LLM (Groq) puede reformular el texto; las **páginas citadas** son la fuente
+- El LLM puede reformular el texto; las **páginas citadas** son la fuente
   fiable para verificar la respuesta literal.
 
 ---

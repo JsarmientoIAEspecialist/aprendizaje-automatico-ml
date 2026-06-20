@@ -18,7 +18,7 @@ import streamlit as st
 
 from rag_core import (
     DEFAULT_K,
-    GROQ_MODEL,
+    LLM_MODEL,
     PERSIST_DIR,
     cargar_embeddings,
     cargar_llm,
@@ -66,8 +66,8 @@ with st.sidebar:
     st.markdown(
         "- **Documento:** Código Nacional de Tránsito (Ley 769 de 2002)\n"
         "- **Embeddings:** `paraphrase-multilingual-MiniLM-L12-v2` (local)\n"
-        f"- **LLM:** `{GROQ_MODEL}` (Groq)\n"
-        "- **Base vectorial:** ChromaDB"
+        "- **LLM:** Llama 3.3 70B (vía HuggingFace Router)\n"
+        "- **Base vectorial:** FAISS"
     )
     k = st.slider("Fragmentos a recuperar (k)", min_value=3, max_value=10, value=DEFAULT_K)
     st.divider()

@@ -68,7 +68,7 @@ def main() -> None:
 
     # --- PASO 3: Generar embeddings locales --------------------------------
     print(f"\n[3/4] Cargando modelo de embeddings: {EMBEDDING_MODEL}")
-    print("      (la primera vez se descargan ~120 MB; corre en CPU)")
+    print("      (la primera vez se descargan ~1 GB; corre en CPU)")
     embeddings = cargar_embeddings()
 
     # --- PASO 4: Almacenar en la base vectorial FAISS ----------------------
@@ -95,7 +95,7 @@ def main() -> None:
     print("=" * 65)
     print(f"  Ubicación:            {PERSIST_DIR}")
     print(f"  Fragmentos indexados: {total}")
-    print(f"  Modelo embeddings:    {EMBEDDING_MODEL} (local, CPU, 384 dim)")
+    print(f"  Modelo embeddings:    {EMBEDDING_MODEL} (local, CPU, 768 dim)")
     print("\n  Ahora puedes lanzar el chat con:  streamlit run app.py")
 
 

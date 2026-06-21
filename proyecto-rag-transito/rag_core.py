@@ -20,18 +20,24 @@ from langchain_openai import ChatOpenAI
 
 # --- Configuración central (un solo lugar para cambiar parámetros) ----------
 
-# Modelo de embeddings local (CPU, multilingüe, ~120 MB la primera vez).
-EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+# Modelo de embeddings local (CPU, multilingüe, ~1 GB la primera vez).
+# mpnet-base-v2 (768 dim) rankea mejor que MiniLM: más recall y citas más precisas.
+EMBEDDING_MODEL = "paraphrase-multilingual-mpnet-base-v2"
 
 # Carpeta donde FAISS persiste el índice vectorial en disco (index.faiss + index.pkl).
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "faiss_index")
 _INDEX_FILE = "index.faiss"   # índice vectorial (FAISS)
 _STORE_FILE = "index.pkl"     # textos + metadatos (docstore)
 
-# LLM vía el router de inferencia de HuggingFace (API compatible con OpenAI).
-# El sufijo ":groq" hace que HF enrute la petición a Groq (llama-3.3-70b-versatile).
+# LLM (API compatible con OpenAI). El sistema soporta dos proveedores:
+#  - Groq directo (recomendado: tier gratis diario y generoso).
+#  - Router de HuggingFace (úsalo si solo tienes HF_TOKEN y créditos disponibles).
+# Define UNA de las dos claves en .env; si están ambas, se prefiere Groq.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 HF_ROUTER_URL = "https://router.huggingface.co/v1"
-LLM_MODEL = "meta-llama/Llama-3.3-70B-Instruct:groq"
+HF_MODEL = "meta-llama/Llama-3.3-70B-Instruct:groq"
+LLM_MODEL = "Llama 3.3 70B"  # etiqueta para mostrar en la interfaz
 
 # Cuántos fragmentos recuperar por pregunta (más fragmentos = mejor recall).
 DEFAULT_K = 8
@@ -104,22 +110,25 @@ def cargar_vector_store(embeddings: HuggingFaceEmbeddings) -> FAISS:
 
 
 def cargar_llm() -> ChatOpenAI:
-    """Configura el LLM vía el router de HuggingFace (compatible con OpenAI).
+    """Configura el LLM (API compatible con OpenAI).
 
-    Requiere HF_TOKEN en el entorno/.env.
+    Usa GROQ_API_KEY (Groq directo) si está disponible; si no, HF_TOKEN (router
+    de HuggingFace). Define una de las dos en el archivo .env.
     """
     load_dotenv()
-    api_key = os.getenv("HF_TOKEN")
-    if not api_key:
-        raise RuntimeError(
-            "Falta HF_TOKEN. Copia .env.example a .env y pega tu token de HuggingFace "
-            "(lo obtienes gratis en https://huggingface.co/settings/tokens)."
+    groq_key = os.getenv("GROQ_API_KEY")
+    hf_key = os.getenv("HF_TOKEN")
+    if groq_key:
+        return ChatOpenAI(
+            model=GROQ_MODEL, temperature=0.0, api_key=groq_key, base_url=GROQ_BASE_URL
         )
-    return ChatOpenAI(
-        model=LLM_MODEL,
-        temperature=0.0,
-        api_key=api_key,
-        base_url=HF_ROUTER_URL,
+    if hf_key:
+        return ChatOpenAI(
+            model=HF_MODEL, temperature=0.0, api_key=hf_key, base_url=HF_ROUTER_URL
+        )
+    raise RuntimeError(
+        "Falta una clave de LLM en .env. Define GROQ_API_KEY (recomendado, "
+        "https://console.groq.com) o HF_TOKEN (https://huggingface.co/settings/tokens)."
     )
 
 

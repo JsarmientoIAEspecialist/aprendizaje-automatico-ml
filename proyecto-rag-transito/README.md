@@ -69,7 +69,7 @@ diferente del servicio público, se deben cumplir los siguientes requisitos, seg
    realizarán los organismos de tránsito de acuerdo con la reglamentación que expida
    el Ministerio de Transporte.
 
-📄 **Páginas consultadas:** 31, 33, 35, 41, 42, 45, 46
+📄 **Páginas consultadas:** 34, 35, 36, 41, 42, 47
 
 ---
 
@@ -82,7 +82,7 @@ Sin embargo, las autoridades de tránsito pueden verificar estos documentos a tr
 los Sistemas de Información establecidos, sin necesidad de que el conductor los porte
 físicamente.
 
-📄 **Páginas consultadas:** 7, 31, 34, 40, 55, 88, 172, 175
+📄 **Páginas consultadas:** 24, 31, 41, 47, 63, 97, 188
 
 ---
 
@@ -100,7 +100,7 @@ permanente física o mental para conducir, soportada en un certificado médico;
 de embriaguez o bajo el efecto de drogas alucinógenas. Además, la reincidencia en un
 tercer grado de embriaguez es causal de cancelación definitiva de la licencia.
 
-📄 **Páginas consultadas:** 47, 49, 50, 183
+📄 **Páginas consultadas:** 49, 50, 63, 120, 121
 
 ---
 
@@ -119,7 +119,7 @@ Las sanciones varían según el grado de embriaguez (artículo 152):
 Si se trata de conductores de servicio público, transporte escolar o instructores de
 conducción, la multa y el período de suspensión se duplican.
 
-📄 **Páginas consultadas:** 139, 147, 177, 179, 181, 182, 183
+📄 **Páginas consultadas:** 3, 139, 146, 151, 181, 183
 
 ---
 
@@ -128,7 +128,7 @@ conducción, la multa y el período de suspensión se duplican.
 Un vehículo de servicio diplomático o consular es un vehículo automotor destinado al
 servicio de funcionarios diplomáticos o consulares.
 
-📄 **Páginas consultadas:** 11, 13, 14, 16, 20, 58, 62
+📄 **Páginas consultadas:** 11, 14, 47, 59, 62, 63
 
 ---
 
@@ -152,13 +152,13 @@ PDF (Código de Tránsito)
    ▼
 1. Carga del documento        → PyPDFLoader
 2. División en fragmentos      → RecursiveCharacterTextSplitter (500 / 50)
-3. Embeddings locales          → paraphrase-multilingual-MiniLM-L12-v2 (CPU)
+3. Embeddings locales          → paraphrase-multilingual-mpnet-base-v2 (CPU)
 4. Almacenamiento vectorial    → FAISS (índice persistente en disco)
    │  app.py (por cada pregunta)
    ▼
-5. Recuperación semántica      → top-k fragmentos relevantes
+5. Recuperación (Multi-Query)  → reformula la pregunta y une los top-k fragmentos
 6. Prompt aumentado            → contexto + pregunta + reglas de "Lex"
-7. Generación de respuesta     → Llama 3.3 70B (vía HuggingFace Router → Groq)
+7. Generación de respuesta     → Llama 3.3 70B (Groq)
    └─► Respuesta + páginas citadas + fragmentos (trazabilidad)
 ```
 
@@ -172,7 +172,7 @@ información sobre esto en el Código Nacional de Tránsito"*; y nunca inventa.
 
 ### Requisitos
 - Python 3.10 o superior.
-- Un **token de HuggingFace** (gratuito en <https://huggingface.co/settings/tokens>, tipo *Read*).
+- Una **API key de Groq** (gratuita en <https://console.groq.com>) — o, como alternativa, un token de HuggingFace.
 
 ### 1. Clonar y entrar a la carpeta del proyecto
 ```bash
@@ -191,25 +191,26 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 > ℹ️ La primera instalación descarga `torch` (~200 MB) y, al ejecutar por primera
-> vez, el modelo de embeddings (~120 MB). Todo corre en **CPU**, sin GPU.
+> vez, el modelo de embeddings (~1 GB). Todo corre en **CPU**, sin GPU.
 
-### 3. Configurar el token
+### 3. Configurar la API key
 ```bash
 # Copia la plantilla y edita el archivo .env
 copy .env.example .env        # Windows
 # cp .env.example .env        # macOS / Linux
 ```
-Abre `.env` y pega tu token de HuggingFace:
+Abre `.env` y pega tu clave de Groq:
 ```
-HF_TOKEN=hf_tu_token_real
+GROQ_API_KEY=gsk_tu_clave_real
 ```
+> El sistema también acepta `HF_TOKEN` (router de HuggingFace) si prefieres esa vía.
 
 ### 4. Construir la base de conocimiento (una sola vez)
 ```bash
 python ingestar.py
 ```
 Esto carga el PDF, lo divide en fragmentos, genera los embeddings y crea la base
-vectorial `chroma_db/`.
+vectorial `faiss_index/`.
 
 ### 5. Lanzar el asistente (chat web)
 ```bash
@@ -244,9 +245,10 @@ proyecto-rag-transito/
 |---|---|
 | Carga de PDF | `pypdf` / LangChain `PyPDFLoader` |
 | Chunking | LangChain `RecursiveCharacterTextSplitter` |
-| Embeddings | `sentence-transformers` — `paraphrase-multilingual-MiniLM-L12-v2` (local) |
+| Embeddings | `sentence-transformers` — `paraphrase-multilingual-mpnet-base-v2` (local) |
+| Recuperación | FAISS + **Multi-Query** (reformulación de la pregunta) |
 | Base vectorial | `FAISS` |
-| LLM | `Llama 3.3 70B` vía **HuggingFace Router** (API compatible con OpenAI; enruta a Groq) |
+| LLM | `Llama 3.3 70B` vía **Groq** (API compatible con OpenAI; opción de HuggingFace Router) |
 | Interfaz | `Streamlit` |
 
 ---
@@ -255,13 +257,12 @@ proyecto-rag-transito/
 
 - Responde solo sobre el **texto del documento cargado**; no conoce jurisprudencia
   ni normas posteriores que no estén en el PDF.
-- La calidad depende de la **recuperación**: si la respuesta está repartida en
-  muchos artículos, puede recuperar solo una parte (ajustable con el parámetro `k`).
-- **Definiciones del glosario (Artículo 2):** como ese artículo agrupa decenas de
-  términos muy cortos en pocos fragmentos, las preguntas tipo *"¿qué es la
-  inmovilización?"* a veces no recuperan la definición exacta y el asistente responde
-  *"No encontré información…"*. Es preferible esto a inventar, pero es una limitación
-  real de la búsqueda semántica sobre texto tipo diccionario.
+- La calidad depende de la **recuperación**. Para reducir fallos con preguntas
+  vagas se usa **Multi-Query** (la pregunta se reformula y se busca con varias
+  versiones) y un modelo de embeddings potente (`mpnet`). Aun así, una pregunta
+  cuya respuesta **no está escrita literalmente** en el texto (p. ej. definiciones
+  muy cortas del glosario del Art. 2) puede no recuperarse, y el asistente responde
+  *"No encontré información…"*. Es preferible esto a inventar.
 - El LLM puede reformular el texto; las **páginas citadas** son la fuente
   fiable para verificar la respuesta literal.
 

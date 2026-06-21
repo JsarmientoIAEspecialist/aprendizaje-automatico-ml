@@ -66,8 +66,8 @@ with st.sidebar:
     st.header("Sobre Lex")
     st.markdown(
         "- **Documento:** Código Nacional de Tránsito (Ley 769 de 2002)\n"
-        "- **Embeddings:** `paraphrase-multilingual-MiniLM-L12-v2` (local)\n"
-        "- **LLM:** Llama 3.3 70B (vía HuggingFace Router)\n"
+        "- **Embeddings:** `paraphrase-multilingual-mpnet-base-v2` (local)\n"
+        f"- **LLM:** {LLM_MODEL} (Groq)\n"
         "- **Base vectorial:** FAISS"
     )
     k = st.slider("Fragmentos a recuperar (k)", min_value=3, max_value=10, value=DEFAULT_K)

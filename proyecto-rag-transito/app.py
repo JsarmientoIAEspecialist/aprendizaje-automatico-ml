@@ -23,6 +23,7 @@ from rag_core import (
     cargar_embeddings,
     cargar_llm,
     cargar_vector_store,
+    es_respuesta_sin_info,
     responder,
 )
 
@@ -110,7 +111,7 @@ if pregunta := st.chat_input("Escribe tu pregunta sobre el Código de Tránsito.
         paginas = resultado["paginas"]
 
         # Citar páginas al final (requisito de la actividad).
-        if paginas and "No encontré información" not in respuesta:
+        if paginas and not es_respuesta_sin_info(respuesta):
             cita = ", ".join(str(p) for p in paginas)
             respuesta_final = f"{respuesta}\n\n---\n📄 **Páginas consultadas:** {cita}"
         else:

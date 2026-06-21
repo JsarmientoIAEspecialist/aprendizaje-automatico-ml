@@ -36,6 +36,11 @@ LLM_MODEL = "meta-llama/Llama-3.3-70B-Instruct:groq"
 # Cuántos fragmentos recuperar por pregunta (más fragmentos = mejor recall).
 DEFAULT_K = 8
 
+# Multi-Query: reformula la pregunta del usuario en varias versiones y busca con
+# todas. Mejora mucho el recall con preguntas vagas o mal redactadas.
+USAR_MULTIQUERY = True
+N_REFORMULACIONES = 3
+
 # Identidad del asistente (nombre + rol) y reglas de comportamiento.
 PROMPT_TEMPLATE = """Eres Lex, un asistente legal especializado en el Código Nacional \
 de Tránsito de Colombia (Ley 769 de 2002).
@@ -118,38 +123,103 @@ def cargar_llm() -> ChatOpenAI:
     )
 
 
+def _pagina(doc) -> object:
+    """Número de página 1-indexado (PyPDFLoader numera las páginas desde 0)."""
+    p = doc.metadata.get("page")
+    return p + 1 if isinstance(p, int) else "?"
+
+
 def _formatear_contexto(fragmentos) -> str:
-    """Une los fragmentos recuperados etiquetando la página de cada uno."""
+    """Une los fragmentos etiquetando la página (1-indexada) de cada uno."""
     return "\n\n---\n\n".join(
-        f"[Fragmento {i + 1} — Pág. {doc.metadata.get('page', '?')}]\n{doc.page_content}"
+        f"[Fragmento {i + 1} — Pág. {_pagina(doc)}]\n{doc.page_content}"
         for i, doc in enumerate(fragmentos)
     )
 
 
 def _paginas_consultadas(fragmentos) -> list[int]:
-    """Páginas únicas (1-indexadas) de los fragmentos usados, ordenadas.
+    """Páginas únicas (1-indexadas) de los fragmentos usados, ordenadas."""
+    return sorted(
+        {_pagina(d) for d in fragmentos if isinstance(d.metadata.get("page"), int)}
+    )
 
-    PyPDFLoader numera las páginas desde 0, por eso sumamos 1 para mostrar el
-    número real de página del PDF.
+
+def es_respuesta_sin_info(respuesta: str) -> bool:
+    """True si la respuesta es la negativa estándar (para no citar páginas)."""
+    return respuesta.strip().startswith(
+        "No encontré información sobre esto en el Código"
+    )
+
+
+def _top_k_por_relevancia(candidatos, consultas, vector_store, k):
+    """De los candidatos del multi-query, deja los k más relevantes.
+
+    Puntúa cada fragmento por su mejor coincidencia con cualquiera de las
+    reformulaciones (coseno; los embeddings ya están normalizados). Así el
+    contexto y las páginas citadas quedan enfocados y sin ruido.
     """
-    paginas = set()
-    for doc in fragmentos:
-        page = doc.metadata.get("page")
-        if isinstance(page, int):
-            paginas.add(page + 1)
-    return sorted(paginas)
+    if len(candidatos) <= k:
+        return candidatos
+    try:
+        emb = vector_store.embeddings
+        q = np.array(emb.embed_documents(consultas))
+        d = np.array(emb.embed_documents([c.page_content for c in candidatos]))
+        scores = (d @ q.T).max(axis=1)
+        orden = np.argsort(scores)[::-1][:k]
+        return [candidatos[i] for i in orden]
+    except Exception:
+        return candidatos[:k]
 
 
-def responder(pregunta: str, vector_store: FAISS, llm: ChatOpenAI, k: int = DEFAULT_K) -> dict:
+def _reformular(pregunta: str, llm: ChatOpenAI, n: int = N_REFORMULACIONES) -> list[str]:
+    """Genera reformulaciones de la pregunta para mejorar la búsqueda (Multi-Query).
+
+    Devuelve [pregunta_original, reformulación_1, ...]. Si el LLM falla, devuelve
+    solo la pregunta original (degradación elegante).
+    """
+    instruccion = (
+        "Eres experto en el Código Nacional de Tránsito de Colombia. Reescribe la "
+        f"pregunta del usuario en {n} reformulaciones distintas, claras y con "
+        "terminología legal, para mejorar la búsqueda en el documento. Si la pregunta "
+        'sugiere consecuencias, incluye términos como "sanción", "multa" o "infracción". '
+        f"Devuelve SOLO las {n} reformulaciones, una por línea, sin numerarlas ni "
+        f"añadir nada más.\n\nPregunta: {pregunta}"
+    )
+    try:
+        texto = llm.invoke(instruccion).content
+        extras = [linea.strip(" -*•\t0123456789.").strip() for linea in texto.splitlines()]
+        extras = [e for e in extras if e]
+        return [pregunta] + extras[:n]
+    except Exception:
+        return [pregunta]
+
+
+def responder(
+    pregunta: str,
+    vector_store: FAISS,
+    llm: ChatOpenAI,
+    k: int = DEFAULT_K,
+    usar_multiquery: bool = USAR_MULTIQUERY,
+) -> dict:
     """Ejecuta el ciclo RAG completo para una pregunta.
 
-    Devuelve un dict con la respuesta del LLM, las páginas consultadas
-    (para citarlas) y los fragmentos recuperados (para trazabilidad).
+    Con multi-query busca también con reformulaciones de la pregunta y une los
+    resultados (mejor recall en preguntas vagas). Devuelve la respuesta del LLM,
+    las páginas consultadas (para citarlas) y los fragmentos (para trazabilidad).
     """
-    retriever = vector_store.as_retriever(
-        search_type="similarity", search_kwargs={"k": k}
-    )
-    fragmentos = retriever.invoke(pregunta)
+    consultas = _reformular(pregunta, llm) if usar_multiquery else [pregunta]
+    por_consulta = k if len(consultas) == 1 else max(4, (k // 2) + 1)
+
+    # Recuperar con cada consulta y unir, descartando fragmentos repetidos.
+    fragmentos_unicos: dict[str, object] = {}
+    for consulta in consultas:
+        for doc in vector_store.similarity_search(consulta, k=por_consulta):
+            fragmentos_unicos.setdefault(doc.page_content, doc)
+    candidatos = list(fragmentos_unicos.values())
+
+    # Con multi-query unimos muchos fragmentos; nos quedamos con los k más
+    # relevantes para que el contexto y las páginas citadas queden enfocados.
+    fragmentos = _top_k_por_relevancia(candidatos, consultas, vector_store, k)
 
     contexto = _formatear_contexto(fragmentos)
     prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
